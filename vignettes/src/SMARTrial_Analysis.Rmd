@@ -12,7 +12,8 @@ editor_options:
   chunk_output_type: inline
 ---
 
-This R code includes the analyses and figures of the SMART manuscript. This R code includes analyses of Nora Liebers, Peter-Martin Bruch, Miguel Hernandez, Junyan Lu and Tobias Terzer.
+This R code includes the analyses and figures of the SMART manuscript. 
+It includes analyses of Nora Liebers, Peter-Martin Bruch, Junyan Lu, Miguel Hernandez and Tobias Terzer.
 
 # 1 Setup
 ```{r options, message=FALSE, warning = FALSE}
@@ -245,7 +246,7 @@ calcAUC <- function(value, conc) {
     areaTotal/log(valueConc[nrow(valueConc),]$conc/valueConc[1,]$conc)
 }
 
-#Junyan's miscellaneous custom functions: library(jyluMisc)
+#Junyan's miscelaneous custom functions: library(jyluMisc)
 #it creates a pdf doc where it arranges the plots contained in a plotList on a grid 
 makepdf <- function(x, name, ncol = 3, nrow = 2, figNum =NULL, width =20, height = 12) {
   require(gridExtra)
@@ -375,14 +376,62 @@ balanced_folds <- function (class.column.factor, cross.outer){
   return(permutated.cut)
 }
 
+#Function to format floats
+formatNum <- function(i, limit = 0.01, digits =1, format="e") {
+  r <- sapply(i, function(n) {
+    if (n < limit) {
+      formatC(n, digits = digits, format = format)
+    } else {
+      format(n, digits = digits)
+    }
+  })
+  return(r)
+}
+
+# scale matrics
+mscale <- function(x, center = TRUE, scale = TRUE, censor = NULL, useMad = FALSE){
+    if (scale & center) {
+        if (useMad) {
+            x.scaled <- apply(x, 1, function(y) (y-median(y,na.rm = T))/meanAD(y))
+        } else {
+            x.scaled <- apply(x, 1, function(y) (y-mean(y,na.rm=T))/sd(y,na.rm = T))
+        }
+    } else if (center & !scale) {
+        if (useMad) {
+            x.scaled <- apply(x, 1, function(y) (y-median(y,na.rm=T)))
+        } else {
+            x.scaled <- apply(x, 1, function(y) (y-mean(y,na.rm=T)))
+        }
+    } else if (!center & scale) {
+        if (useMad) {
+            x.scaled <- apply(x, 1, function(y) y/meanAD(y))
+        } else {
+            x.scaled <- apply(x, 1, function(y) y/sd(y,na.rm = T))
+        }
+    } else {
+        x.scaled <- t(x)
+    }
+    
+    if (!is.null(censor)) {
+        if (length(censor) == 1) {
+            x.scaled[x.scaled > censor] <- censor
+            x.scaled[x.scaled < -censor] <- -censor
+        } else {
+            x.scaled[x.scaled > censor[2]] <- censor[2] #higher limit
+            x.scaled[x.scaled < censor[1]] <- censor[1] #lower limit
+        }
+    }
+    return(t(as.matrix(x.scaled)))
+}
+
 ```
 
 # 2 Data read in and preprocessing
 ## 2.1 File path
 ```{r filepath} 
-# This filepath can be modified if necessary
+# Modify if necessary
 
-filepath<- "../../"
+filepath <-"../../"
 ```
 
 ## 2.2 Load processed data
@@ -430,7 +479,7 @@ ggplot(data=drugs_overview, aes(x=reorder(pathway, -n.y), y=n.x, fill=as.charact
          xlab("")+
          theme_tmp
 
-# ggsave(width = 12, height =8, path=(paste0(filepath,"04_Figures")), filename = "Figure_1B_Compound_library.svg")
+ggsave(width = 12, height =8, path=(paste0(filepath,"docs")), filename = "Figure_1B_Compound_library.svg")
 
 remove(drugs_overview, theme_tmp)
 ```
@@ -438,13 +487,10 @@ remove(drugs_overview, theme_tmp)
 ## 3.2 Supplementary table: Drug list
 For appendix: includes the pathway, target, Supplier of each drug
 ```{r}
-df_drugs_supp<-df_drugs%>%select(Drug, pathway, target, Supplier)%>%filter(Drug!="Bortezomib + Cytarabine(800nM)")%>%rename(Compound="Drug")%>%rename(Main.targets_mode.of.action="target")%>%rename(Simplified.drug.class="pathway")
+'df_drugs_supp<-df_drugs%>%select(Drug, pathway, target, Supplier)%>%filter(Drug!="Bortezomib + Cytarabine(800nM)")%>%rename(Compound="Drug")%>%rename(Main.targets_mode.of.action="target")%>%rename(Simplified.drug.class="pathway")
 
-df_drugs_supp %>% DT::datatable(width = 700)
-
-# write_xlsx(df_drugs_supp,"04_Figures/table_S1_drugs.xlsx")
-
-remove(df_drugs_supp)
+write_xlsx(df_drugs_supp,"docs/table_S1_drugs.xlsx")
+remove(df_drugs_supp)'
 ```
 
 # 4 Patient characteristics
@@ -472,15 +518,50 @@ df_invivo<-df_invivo %>%
 table1(~ Sex + age + diagnosis_summarized + time_from_ED_dich + lines_pretreatment_cat+ material +tumor_infiltration +Treatment_type,  data=df_invivo, overall="Total",  render.continuous=my.render.cont, render.categorical=my.render.cat)
 ```
 
+## 4.1.1 Plot of diagnosis
+```{r}
+df_invivo %>% 
+  dplyr::count(diagnosis) %>%  
+  mutate(diagnosis=factor(diagnosis, levels= arrange(dplyr::count(df_invivo, diagnosis),desc(n))$diagnosis )) %>% 
+  
+  ggplot(aes(x="", y=n, fill=diagnosis))+
+  geom_bar(stat="identity", width=1) +
+  coord_polar("y", start=0)+
+  geom_text(aes(x=1.25, angle=c(70,0,0,0,0,30,55,0,0,40),  label = ifelse(n>1,paste0(diagnosis, ": ", n),"")), position = position_stack(vjust=0.5)) +
+  theme_void()+
+  theme(legend.position = "bottom")+
+  scale_fill_brewer(palette="Set3")+
+  labs(fill="Diagnosis")
+
+
+ggsave(width = 6, height = 4, path=(paste0(filepath,"docs")), filename = "Figure_2_Diagnosis_Piechart.svg")
+```
+
+## 4.1.1 Plot of SMARTrial subcohorts
+```{r}
+tibble("Subcohort"=c("Chemotherapy cohort", "CLL cohort treated with \nVenetoclax or Ibrutinib"), "n"=c(46,18)) %>% 
+
+
+  ggplot(aes(x="", y=n, fill=Subcohort))+
+  geom_bar(stat="identity", width=1) +
+  coord_polar("y", start=0)+
+  geom_text(aes(x=1, size=5, label = ifelse(n>1,paste0( n, " / 64"),"")), position = position_stack(vjust=0.5)) +
+  theme_void()+
+  theme(legend.position = "bottom", legend.text = element_text(size=12))+
+  scale_fill_manual(values=c(blue1, red1))+
+  guides(size="none", x="none")+
+  labs(fill="")
+
+ggsave(width = 6, height = 4, path=(paste0(filepath,"docs")), filename = "Figure_2_Subcohort_Piechart.svg")
+```
+
 ## 4.2 Patient list
 For appendix: includes clinical data for each patient
 ```{r}
 df_patients_supp<-df_invivo%>%select(patientID, diagnosis, age, Sex, material, tumor_infiltration, lines_pretreatment, treatment_spec, Response_def_parameter_final,  Resp_protocol, Death, time_EFS)
 df_patients_supp<-df_patients_supp%>%mutate(time_EFS=ifelse(Resp_protocol=="na", "na", time_EFS))
 
-df_patients_supp %>% DT::datatable(width = 700)
-
-# write_xlsx(df_patients_supp,"04_Figures/table_S3_patients.xlsx")
+write_xlsx(df_patients_supp,path=paste0(filepath,"docs/table_S1_SMARTrial_patients.xlsx"))
 
 remove(df_patients_supp)
 ```
@@ -492,6 +573,91 @@ fit_FU <- survfit(Surv(time_OS/365, Death_r) ~ 1, data=df_invivo)
 surv_median(fit_FU)
 
 remove(fit_FU)
+```
+## 4.4 Time from Diagnosis to Treatment initiation
+```{r, fig.width=7, fig.height=10}
+my_colors <- c("#7fc97f","#beaed4", "#fdc086", "#ffff99", "#386cb0" , "#f0027f")
+# add names so bar for 'c' gets fill, too
+names(my_colors) <- c("ALL","AML", "CLL","DLBCL", "MCL", "T-PLL")
+
+df_invivo %>% 
+  mutate(time_report=as.numeric(time_report), time_diarel_treatment=as.numeric(time_diarel_treatment)) %>% 
+  mutate(colorscale=ifelse(time_report>time_diarel_treatment, diagnosis, "Report in time for treatment")) %>% 
+  
+  ggplot(aes(x=time_report, y=time_diarel_treatment))+
+  geom_beeswarm(aes(color=colorscale), cex=1.7, size=3)+
+  # scale_color_brewer(palette = "Paired")+
+  # scale_color_manual(values=c("#7fc97f","#beaed4", "#fdc086", "#ffff99", "#386cb0" ,"#f0027f", "red"), limits=c("ALL","AML", "CLL","DLBCL", "MCL", "T-PLL"))+
+  scale_color_manual(values = my_colors,limits = c("ALL","AML", "CLL","DLBCL", "MCL", "T-PLL"), na.value = "black")+
+  theme_figures+
+  scale_y_continuous(trans=scales::pseudo_log_trans(base = 10), limits = c(0,160), breaks = c(0,2,7,14,30,90))+ 
+  scale_x_continuous(trans=scales::pseudo_log_trans(base = 10), limits = c(0,20), breaks = c(0,2,7,14))+
+  theme(legend.position = "bottom")+
+  coord_fixed()+
+  geom_vline(xintercept = 7, linetype=2)+
+  labs(color="", x="Time from study inclusion to DRP report (days)", y="Time from diagnosis of relapse / occurence of \ntreatment indication to treatment initiation (days)" )
+
+
+
+df_invivo %>% 
+  filter(time_report>time_diarel_treatment) %>% 
+  group_by(diagnosis) %>% 
+  count()
+
+df_invivo %>% 
+  mutate(time_report=as.numeric(time_report), time_diarel_treatment=as.numeric(time_diarel_treatment),
+         delaybyDRP=time_report-time_diarel_treatment) %>% 
+  filter(delaybyDRP>0) %>% 
+  group_by(delaybyDRP) %>% 
+  count()
+  
+```
+
+```{r}
+df_invivo %>% 
+  group_by(diagnosis) %>% 
+  summarise(median.time.to.treatment=median(time_diarel_treatment), range=paste0(min(time_diarel_treatment), " - ", max(time_diarel_treatment)), count = n()) %>% 
+  arrange(desc(count))
+```
+
+## 4.5 Overview of the drug respone pattern
+
+```{r, fig.height=15, fig.width=15}
+df_forClustering <- data_all %>% filter(!Resp_protocol %in% c("",NA,"na")) %>%
+    dplyr::rename(response = Resp_protocol, pretreatment = Pretreatment) %>%
+    mutate(frozen = screenData[match(patientID, screenData$patientID),]$frozen) %>%
+    mutate(material = ifelse(material == "BM","Bone marrow",
+                           ifelse(material == "LN","Lymph node", "Peripheral blood")), 
+         sample = ifelse(frozen == TRUE,"Frozen","Fresh"),
+         TP53 = ifelse(TP53 %in% "1","Mut", ifelse(TP53 %in% "0", "WT", NA))) 
+
+viabMat <- df_forClustering %>% distinct(patientID, Drug, AUC) %>%
+    pivot_wider(names_from = patientID, values_from = AUC) %>%
+    column_to_rownames("Drug") %>% as.matrix()
+viabMat <- viabMat[,complete.cases(t(viabMat))]
+
+viabMat.scaled <-  mscale(viabMat, censor =4)
+
+annoCol <- distinct(df_forClustering, patientID, diagnosis, response, pretreatment, material, sample, TP53) %>%
+    data.frame() %>% column_to_rownames("patientID")
+
+#define annotaiton colors
+colorAnno <- list(diagnosis = structure(RColorBrewer::brewer.pal(10,"Set3"), 
+                                        names = c("AML", "ALL","DLBCL", "BL", "FL", "MCL", "CLL", "B-PLL", "T-PLL", "T-NHL" )),
+                  TP53 = c(Mut = red2, WT = "white"),
+                  pretreatment = c(Yes = red2, No = "white"),
+                  sample = c(Fresh = "#386cb0", Frozen = "#f0027f"),  
+                  response = c(R = blue1, PD = red1, SD = gray1),
+                  material = c(`Bone marrow` = "#7fc97f", `Lymph node` = "#beaed4", `Peripheral blood` = "#fdc086")
+                  )
+
+p<-pheatmap::pheatmap(viabMat.scaled, annotation_col = annoCol, scale = "row", clustering_method = "ward.D2",
+                   color=colorRampPalette(c(blue2, "white", red2))(100),
+                   show_colnames = FALSE, annotation_colors = colorAnno,
+                   main = "Hierarchical clustering of ex vivo responses in SMARTrial cohort", silent = TRUE)
+plot(p$gtable)
+ggsave("../../docs/Figure_S4.png", plot = p$gtable, height = 15, width =15)
+ggsave("../../docs/Figure_S4.pdf", plot = p$gtable, height = 15, width =15)
 ```
 
 # 5 Primary endpoint
@@ -534,13 +700,13 @@ ggplot(data=df_prim_endpoint, aes(x=as.factor(time_to_analysis), y=percent, fill
   scale_fill_manual(values=c(red1, blue1), name="Time to report")+
   theme_figures_wo_legend
 
-# ggsave(width = 6, height = 4, path=(paste0(filepath,"04_Figures")), filename = "Figure_2B_Time_to_report.svg")
+ggsave(width = 6, height = 4, path=(paste0(filepath,"docs")), filename = "Figure_2B_Time_to_report.svg")
 
 
 # remove(df_prim_endpoint)
 ```
 
-# 6 Pathways and drug difference between in-vivo response groups in chemotherapy patients
+# 6 Pathways and drug difference between in-vivo response groups in chemotherapy patients 
 
 ## 6.1 Prepare base data frame
 ```{r}
@@ -597,11 +763,11 @@ df_p_drugAUC %>% select(Pathway, name, prop_sig_pathway, pval) %>% unique() %>%
 ```{r}
 #mean per pathway per in-vivo group
 plotTab <- group_by(df_p_drugAUC, Pathway, response) %>% 
-  summarise(AUC_pathway_response = mean(AUC), .groups="keep") %>% 
+  summarise(AUC_pathway_response = mean(AUC)) %>% 
   #difference R vs PD
   group_by(Pathway) %>%
   summarise(diff_RvsPD = AUC_pathway_response[response == "R"] - AUC_pathway_response[response == "PD"], 
-            direction = ifelse(diff_RvsPD < 0,"decreased","increased"), .groups = "keep") %>% ungroup() %>%
+            direction = ifelse(diff_RvsPD < 0,"decreased","increased")) %>% ungroup() %>%
   #arrange and update arrangement for plot
   arrange( diff_RvsPD ) %>% mutate(Pathway = factor(Pathway, levels = unique(Pathway)))
 
@@ -614,16 +780,16 @@ Pathway_order<-plotTab %>%
 
 ### 6.3.2 Plot waterfall
 ```{r waterfall, fig.height=8, fig.width=12}
-plot_3A<-ggplot(plotTab, aes(x=Pathway, y=diff_RvsPD, fill=direction)) +
+waterfall_plot_Rvs_PD<-ggplot(plotTab, aes(x=Pathway, y=diff_RvsPD, fill=direction)) +
   geom_col(color="black", size=0.7, alpha=0.65, ) +
   scale_fill_manual(values = c("decreased"=red1,"increased"=blue1), name = "Viability")+ 
   coord_cartesian(ylim = c( min((plotTab$diff_RvsPD)) , 0.2 ) ) +
   ylab("Viability difference\n") + xlab("") +
-  theme_figures_x_angle_45_wo_legend+
+  theme_figures_x_angle_wo_legend+
   ggtitle("\u0394 = viability (R) – viability (PD)")
 
 
-plot_3A
+waterfall_plot_Rvs_PD
 
 # remove(plotTab)
 ```
@@ -648,8 +814,8 @@ plotTab[plotTab$name == "Abemaciclib (LY2835219)",]$name <- "Abemaciclib"
 ```
 
 ### 6.4.2 Plot
-```{r, fig.height=7, fig.width=9, message=FALSE, warning=FALSE}
-plot_3B<-ggplot(plotTab, aes(x=factor(Pathway, levels = Pathway_order), y=log10_pval, fill=significant)) + 
+```{r, fig.height=7, fig.width=9}
+Sign_drugs_RvsPD<-ggplot(plotTab, aes(x=factor(Pathway, levels = Pathway_order), y=log10_pval, fill=significant)) + 
   geom_point(shape=21, color ="black", stroke=0.5, size=2.5, alpha=0.6, show.legend = F) +
   scale_fill_manual(values = c("TRUE"=red1, "FALSE"="white")) +
   geom_hline(yintercept = -log10(0.05), linetype="22", col="gray37") +
@@ -664,7 +830,7 @@ plot_3B<-ggplot(plotTab, aes(x=factor(Pathway, levels = Pathway_order), y=log10_
   theme(plot.title=element_text(size=fontsize+4, hjust = 0.5, face="bold"),
         text=element_text(size=fontsize),
         axis.text.y =element_text(size=fontsize),
-        axis.text.x =element_text(size=fontsize, angle=45, vjust=1, hjust=1),
+        axis.text.x =element_text(size=fontsize, angle=90, vjust=0.5, hjust=1),
         axis.title.y =element_text(size=fontsize+2),
         axis.title.x =element_text(size=fontsize+2),
         panel.grid.major.x = element_line(size = 0.5,linetype = "13"), 
@@ -672,16 +838,29 @@ plot_3B<-ggplot(plotTab, aes(x=factor(Pathway, levels = Pathway_order), y=log10_
         axis.ticks.length.x = unit(0.3, "cm"),
         legend.position = "none")
  
-plot_3B 
+Sign_drugs_RvsPD 
 
 
 # remove(plotTab)
 ```
 
+## Plot Figure S7
+```{r, fig.width=12, fig.height=16}
+waterfall_plot_Rvs_PD+
+  Sign_drugs_RvsPD+
+  plot_layout(ncol=1)+
+  plot_annotation( tag_levels = "A"  )
+
+
+ggsave(path=(paste0("../../docs/")), filename = "Figure_S7.pdf", device = cairo_pdf)
+```
+
+
+
 ## 6.5 Panel C: Dose-response curves and AUC box-plots for exemplary drugs.
 **Selected drugs**
 ```{r}
-example_drugs <- c("Idarubicin", "Vindesine", "Palbociclib", "Ganetespib")
+example_drugs <- c("Idarubicin", "Vindesine")
 ```
 
 **Fit curves**
@@ -712,12 +891,18 @@ plotTab <- select(df_chemo, Pathway, name, patientID, response, concentration, n
 ```{r}
 plotList_DResp <- lapply( example_drugs ,function(drugname){
   #plot values: real with dots, predicted with line
-  ggplot(NULL,aes(color=response, fill=response)) + 
+  plotTabSub <- filter(plotTab, name == drugname)
+  ciTab <- group_by(plotTabSub, response, concentration) %>%
+      summarise(meanVal = mean(normVal), sdVal = sd(normVal), n=length(patientID)) %>%
+      mutate(se = sdVal/sqrt(n), ci = 1.96*se)
+  p <- ggplot(NULL,aes(color=response, fill=response)) + 
     geom_line(data = df_smooth_curve[df_smooth_curve$name == drugname,], 
               aes(x= concentration, y= viab_pred), size=1) + 
-    geom_point(data = plotTab[plotTab$name == drugname,] , 
+    geom_point(data = plotTabSub , 
                aes(x= concentration, y=normVal), 
-               shape = 21, size=3.5, alpha = 0.5, color="black") +
+               shape = 21, size=3.5, alpha = 0.3, color="black") +
+    geom_errorbar(data = ciTab, aes(x=concentration, y=meanVal, ymax = meanVal + ci, ymin=meanVal-ci), 
+                  width=0.1, size=1) +
     scale_color_manual(values = c("R" = blue1, "PD"=red2)) +
     scale_fill_manual(values = c("R" = blue2, "PD"=red1)) +
     
@@ -739,12 +924,16 @@ plotList_DResp <- lapply( example_drugs ,function(drugname){
         axis.ticks = element_line(size=1.5),
         legend.text = element_text(size=fontsize),
         legend.title = element_text(size=fontsize+2))
+  p
 })
 
 
 plotList_box <- lapply( example_drugs ,function(drugname){
   #get the df
   df_plot <- filter(df_p_drugAUC, name == drugname)
+  pval <- formatC(unique(df_plot$pval), digits = 2)
+  pText <- bquote(italic("P")~"="~.(pval))
+  
   #make plot
   p <- ggplot(df_plot, aes(x=response, y=AUC)) + 
     geom_boxplot(aes(fill = response), width = 0.8, size=0.8, alpha = 0.85, 
@@ -752,10 +941,10 @@ plotList_box <- lapply( example_drugs ,function(drugname){
     scale_fill_manual(values = c("PD"=red1,"R"=blue1) ) +
     geom_beeswarm(aes(color = response),cex=3, dodge.width=0.8, shape=21, 
                   fill="slategray4", size=4, alpha= 0.7) +
+    ggplot2::annotate(geom = "text", label = pText, x=2.0, y=1.3, parse = FALSE, hjust=0)+
     scale_color_manual(values = c("black", "black") ) + 
     geom_hline(yintercept = 1, linetype="22", col="gray30", size=0.7) +
     coord_cartesian(ylim = c(0,1.5)) +
-    
     labs(title= "" ) +
     xlab(expression(paste(italic("in vivo")," response"))) +
     ylab("Viability (AUC)") +
@@ -820,14 +1009,18 @@ remove(df_plot_vind, p, legend_3C_tmp)
 
 
 **plot figs**
-```{r, fig.height=10, fig.width=7}
+```{r, fig.height=6, fig.width=14}
+# plot_3C_tmp<-plot_grid(plotlist = plotList, nrow=4, ncol=2, rel_widths = c(1, 0.8))
+# 
+# 
+# plot_3C<-plot_grid(plot_3C_tmp, legend_3C, ncol = 1, rel_heights = c(1, .1))
+# plot_3C
+
+
 
 design<-"
-A#B
-C#D
-E#F
-G#H
-III
+A#B#C#D
+EEEEEEE
 "
 
 plot_3C<-
@@ -835,18 +1028,18 @@ plotList[[1]]+
 plotList[[2]]+
 plotList[[3]]+
 plotList[[4]]+
-plotList[[5]]+
-plotList[[6]]+
-plotList[[7]]+
-plotList[[8]]+
+# plotList[[5]]+
+# plotList[[6]]+
+# plotList[[7]]+
+# plotList[[8]]+
   legend_3C+
   
-  plot_layout(design = design, widths = c(1,0.02,0.98))
+  plot_layout(design = design, widths = c(1,0.01,0.98,0.01,1,0.01,0.98), heights = c(1,0.2))
 
 plot_3C
-
-remove(df, df_smooth_curve, plotList, plotList_box, plotList_DResp, plotTab, res, legend_3C)
+#remove(df, df_smooth_curve, plotList, plotList_box, plotList_DResp, plotTab, res, legend_3C)
 ```
+
 
 # 7 Elastic net regression model
 ```{r, warning=FALSE, fig.height=10, fig.width=6}
@@ -937,7 +1130,7 @@ tmp<-tmp%>%mutate(AUC_10percent=AUC*100/10)
 result<-data.frame(matrix(nrow =1, ncol=5))
 colnames(result)<- c("drug", "HR",  "lower", "upper","p_value_cox")
 
-for(i in unique(tmp$Drug)){
+for(i in levels(tmp$Drug)){
 tmp2<-tmp%>%filter(Drug==i)
 cox<-coxph(Surv(time_EFS/365, Event) ~ (AUC_10percent), 
                data=tmp2)
@@ -955,7 +1148,7 @@ result<-result[-which(rownames(result)==1),]
 tablefig3D<-result[-which(rownames(result)==1),]
 
 # plot results
-# knitr::kable(tablefig3D)
+knitr::kable(tablefig3D)
 
 remove(tmp, tmp2, cox, cox_sum)
 ```
@@ -1029,6 +1222,11 @@ fit_EFS <- survfit(Surv(time_EFS/365, Event) ~ drug_sensitive, data=tmp)
 surv_median(fit_EFS)
 survdiff(Surv(time_EFS/365, Event) ~ drug_sensitive, data=tmp)
 
+# annotate p-value
+pval <- filter(result, drug == "Vindesine")$p_value_cox
+pval <- formatNum(pval, digits = 1)
+pAnno <- bquote(italic("P")~"="~.(pval))
+     
 # plot KM curve
 ggsurvplot_EFS_Vind<-ggsurvplot(fit_EFS,  conf.int =FALSE, risk.table = TRUE, pval = FALSE,
            title="Vindesine",
@@ -1044,9 +1242,10 @@ ggsurvplot_EFS_Vind<-ggsurvplot(fit_EFS,  conf.int =FALSE, risk.table = TRUE, pv
            palette = c(blue1, red1),
            ggtheme=theme_figures)
 
-ggsurvplot_EFS_Vind
+plot_EFS_Vind <- ggsurvplot_EFS_Vind$plot + ggplot2::annotate("text",label=pAnno, x = 2, y=0.8, hjust =0, size=5)
 
-plot_EFS_Vind<-ggsurvplot_EFS_Vind$plot
+plot_EFS_Vind
+
 
 remove(tmp, x, m_EFS, fit_EFS, ggsurvplot_EFS_Vind)
 ```
@@ -1082,6 +1281,12 @@ fit_EFS <- survfit(Surv(time_EFS/365, Event) ~ drug_sensitive, data=tmp)
 surv_median(fit_EFS)
 survdiff(Surv(time_EFS/365, Event) ~ drug_sensitive, data=tmp)
 
+# annotate p-value
+pval <- filter(result, drug == "Vincristine")$p_value_cox
+pval <- formatNum(pval, digits = 1)
+pAnno <- bquote(italic("P")~"="~.(pval))
+
+
 # plot KM curve
 ggsurvplot_EFS_Vinc<-ggsurvplot(fit_EFS,  conf.int =FALSE, risk.table = TRUE, pval = FALSE,
            title="Vincristine",
@@ -1097,9 +1302,8 @@ ggsurvplot_EFS_Vinc<-ggsurvplot(fit_EFS,  conf.int =FALSE, risk.table = TRUE, pv
            palette = c( blue1, red1),
            ggtheme=theme_figures)
 
-ggsurvplot_EFS_Vinc
-
-plot_EFS_Vinc<-ggsurvplot_EFS_Vinc$plot
+plot_EFS_Vinc<-ggsurvplot_EFS_Vinc$plot + ggplot2::annotate("text",label=pAnno, x = 2, y=0.8, hjust =0, size=5)
+plot_EFS_Vinc
 
 remove(tmp, x, m_EFS, fit_EFS, ggsurvplot_EFS_Vinc)
 ```
@@ -1230,30 +1434,24 @@ plot_3F
 ```
 
 # 9 Plot Figure 3
-```{r, fig.width=18, fig.asp=29/21}
+```{r, fig.width=16, fig.height=16}
 library("Cairo")
 
 
 design<-"
-AAAC
-DDEE
-FFFF
+AAAA
+BBCC
+DDDD
 "
-tp<-theme(plot.tag = element_text(size=22))
+tp<-theme()
 
-  wrap_elements(plot_3A+ plot_3B+ plot_layout(ncol=1)+ plot_annotation(tag_levels = list(c('A', 'B'))))+
-  wrap_elements(plot_3C+ plot_annotation(tag_levels = list(c('C'))))+
-  wrap_elements( Fig3D +tp + plot_annotation(tag_levels = list(c('D'))))+
-  wrap_elements(plot_3E+ plot_annotation(tag_levels = list(c('E'))))+
-  wrap_elements(plot_3F+ plot_annotation(tag_levels = list(c('F'))))+ 
-  plot_layout(design=design, widths = c(1,1,.2,1.8), heights = c(2,.5,.7))+
-    plot_annotation(title="Figure 3") & theme(title = element_text(size=30))
+wrap_elements(plot_3C) + wrap_elements(Fig3D) + wrap_elements(plot_3E) + wrap_elements(plot_3F) +
+    plot_layout(design=design, widths = c(1,1,.2,1.8), heights = c(1.2,.5,.7)) +
+    plot_annotation(title = "Figure 3", tag_levels = "A") &  theme(title = element_text(size=30), plot.tag = element_text(size=22))
+
+ggsave(path=(paste0("../../docs/")), filename = "Figure_3.svg")
   
-# ggsave(path=(paste0(filepath,"04_Figures")), filename = "Figure_3.svg")
-  
-# ggsave(path=(paste0(filepath,"04_Figures")), filename = "Figure_3.pdf", device = cairo_pdf)
-  
-  
+ggsave(path=(paste0("../../docs/")), filename = "Figure_3.pdf", device = cairo_pdf)
 ```
 
 
@@ -1298,7 +1496,7 @@ plot_S005_ESS<-df_S005%>%filter(Pathway=="Chemotherapy")%>%
 
 plot_S005_ESS
 
-# ggsave( path=(paste0(filepath,"04_Figures")), filename = "Figure_4A_Burkitt_lymphoma.svg")
+ggsave( path=(paste0(filepath,"docs")), filename = "Figure_S9.svg")
 
 remove(df_S005, plot_S005_ESS, theme_figures_S005)
 ```
@@ -1362,7 +1560,7 @@ plot_ven<-df_CLL_ven%>%ggplot(aes(x=reorder(patientID, -ES_AUC), y=-ES_AUC, fill
 remove(df_CLL_ven)
 ```
 
-## 11.3 Figure 5
+## 11.3 CLL VEN and Ibru cohort
 ```{r, fig.width=12, fig.height=7}
 design1<-"
 AB
@@ -1374,22 +1572,23 @@ figure_CLL<-
   wrap_elements(plot_ven)+tp+
   wrap_elements(plot_ibr)+tp+
   plot_layout(design=design1)+
-  plot_annotation(tag_levels ="A", title="Figure 5") & theme(title = element_text(size=18))
+  plot_annotation(tag_levels ="A") & theme(title = element_text(size=18))
 
 figure_CLL
 
-# ggsave(path=(paste0(filepath,"04_Figures")), filename = "Figure_5_CLL_patients.pdf")
+ggsave(path=(paste0(filepath,"docs")), filename = "Figure_S10.pdf")
 # remove(tp, plot_ibr, plot_ven, figure_CLL)
 ```
 
 # 12 Quality assessment based on the type of sample material
-**plate_mean_normVal of inner DMSO controls by sample_type: BM, LN, PB**
+(Analyses done by Miguel)  
+**plate_mean_normVal of inner DMSO ctrls by sample_type: BM, LN, PB**
 ```{r}
 anova_res <- filter(screenData, Drug== "DMSO", !edge) %>% 
-  group_by(plateID, material) %>% summarise(plate_mean_normVal = mean(normVal), .groups = "keep") %>% ungroup() %>%
+  group_by(plateID, material) %>% summarise(plate_mean_normVal = mean(normVal)) %>% ungroup() %>%
   mutate(material = factor(material, levels = unique(material))) 
 
-# anova_res %>% DT::datatable(width = 700)
+anova_res %>% DT::datatable(width = 700)
 ```
 
 **Show ANOVA res**
@@ -1403,10 +1602,10 @@ remove(anova_res, m)
 **Show plate median sdev and range**
 ```{r}
 filter(screenData, Drug== "DMSO", !edge) %>% group_by(plateID, patientID) %>% 
-  summarise(plate_sdev = round(sd(normVal),4) , .groups = "keep") %>% ungroup() %>% 
+  summarise(plate_sdev = round(sd(normVal),4) ) %>% ungroup() %>% 
   summarise(median_sdev = round(median(plate_sdev),4 ), 
             range_sdev = paste0( round(range(plate_sdev)[1],4) , 
-                                 " - ", range(plate_sdev)[2] ), .groups = "keep") 
+                                 " - ", range(plate_sdev)[2] )) 
 ```
 
 **prepare data**
@@ -1441,7 +1640,8 @@ p1<-ggplot(plotTab, aes(x = material, y = plate_sdev, fill = frozen, shape = pla
   theme(legend.position = "right")
 p1  
   
-# ggsave( path=(paste0(filepath,"04_Figures")), filename = "Figure_S1_Quality_assessment.pdf")
+ggsave( path=(paste0(filepath,"docs")), filename = "Figure_S1_Quality_assessment.pdf")
+
 
 
 remove(plotTab)
@@ -1466,15 +1666,111 @@ pheatmap::pheatmap(cor.mat,
          color= names(breaks),
          border_color=NA,
          fontsize = 7,
-         # filename=paste0(filepath,"04_Figures/Figure_S2.pdf"),
+         filename=paste0(filepath,"docs/Figure_S2.pdf"),
          width = 14,
          height = 14)
 
 
-# ggsave( path=(paste0(filepath,"04_Figures")), filename = "Figure_S2.pdf")
+# ggsave( path=(paste0(filepath,"docs")), filename = "Figure_S2.pdf")
 
 # unique(data_all$patientID) %>% length()
 ```
+
+## 12.2 Raw viability between fresh and frozen samples
+
+```{r}
+
+screenData %>% 
+  select(patientID, material, frozen) %>% 
+  unique() %>% 
+  group_by(material, frozen) %>%
+  count()
+```
+
+### Per Plate
+CAVE: This treats plates as replicates
+
+
+
+```{r, fig.width=10, fig.height=4}
+
+p1<-screenData %>% 
+  filter(Drug %in% c("DMSO","PBS"), !edge) %>% 
+  group_by(patientID, frozen, material) %>% 
+  summarise(value=mean(value), sdev=mean(plate_sdev), .groups="keep") %>% 
+  mutate(material = ifelse(material == "BM","Bone marrow",
+                    ifelse(material == "LN","Lymph node", "Peripheral blood")), 
+         frozen = ifelse(frozen == TRUE,"Frozen","Fresh")) %>% 
+  
+ggplot(aes(x=frozen, y=value))+
+  geom_boxplot()+
+  geom_beeswarm()+
+  stat_compare_means(method="t.test", comparisons = list(c(1,2)))+
+  facet_wrap(~material)+
+  scale_y_log10()+
+  labs(y="Luminescence count\nin ATP assay", x="Sample pretreatment")+
+  theme_figures
+
+
+p2<-select(screenData, plateID, plate_sdev, plate, material, frozen) %>% unique() %>%
+  mutate(material = ifelse(material == "BM","Bone marrow",
+                    ifelse(material == "LN","Lymph node", "Peripheral blood")), 
+         frozen = ifelse(frozen == TRUE,"Frozen","Fresh")) %>% 
+
+ggplot(aes(x=frozen, y=plate_sdev))+
+  geom_boxplot()+
+  geom_beeswarm()+
+  stat_compare_means(method="t.test", comparisons = list(c(1,2)))+
+  facet_wrap(~material)+
+  labs(y="Standard deviation (SD)", x="Sample pretreatment")+
+  theme_figures
+
+p1+p2
+```
+ 
+
+### Per Patient sample
+
+```{r, fig.width=14, fig.height=5}
+
+p1<-screenData %>% 
+  filter(Drug %in% c("DMSO","PBS"), !edge) %>% 
+  group_by(patientID, frozen, material) %>% 
+  summarise(value=mean(value), sdev=mean(plate_sdev), .groups="keep") %>% 
+  mutate(material = ifelse(material == "BM","Bone marrow",
+                    ifelse(material == "LN","Lymph node", "Peripheral blood")), 
+         frozen = ifelse(frozen == TRUE,"Frozen","Fresh")) %>% 
+  
+ggplot(aes(x=frozen, y=value))+
+  geom_boxplot()+
+  geom_beeswarm()+
+  stat_compare_means(method="t.test", comparisons = list(c(1,2)))+
+  facet_wrap(~material)+
+  scale_y_log10()+
+  labs(y="Luminescence count\nin ATP assay", x="Sample pretreatment")+
+  theme_figures
+
+
+p2<-select(screenData, patientID, plateID, plate_sdev, plate, material, frozen) %>% 
+  group_by(patientID, frozen, material) %>% 
+  summarise(plate_sdev=mean(plate_sdev), .groups="keep") %>% 
+  # unique() %>%
+  mutate(material = ifelse(material == "BM","Bone marrow",
+                    ifelse(material == "LN","Lymph node", "Peripheral blood")), 
+         frozen = ifelse(frozen == TRUE,"Frozen","Fresh")) %>% 
+
+ggplot(aes(x=frozen, y=plate_sdev))+
+  geom_boxplot()+
+  geom_beeswarm(cex=2)+
+  stat_compare_means(method="t.test", comparisons = list(c(1,2)))+
+  facet_wrap(~material)+
+  labs(y="Standard deviation (SD)", x="Sample pretreatment")+
+  theme_figures
+
+p1+p2
+```
+
+
 
 # 13 Genotype - phenotype associations
 ## 13.1 FLT3-ITD ratio & FLT3 inhibitors
@@ -1487,7 +1783,6 @@ tmp<-data_all%>%
   filter(!is.na(FLT3_ITD_ratio), FLT3_ITD_ratio!="na")%>%
   # only FLT3 inhibnitors are considered
   filter(Drug=="Crenolanib" | Drug=="Gilteritinib" | Drug=="Quizartinib"| Drug=="Sorafenib"| Drug=="Midostaurin hydrate")%>%
-  mutate(Drug=as.character(Drug)) %>% 
   mutate(Drug=ifelse(Drug=="Midostaurin hydrate", "Midostaurin\nhydrate", Drug)) %>% 
   select(patientID, Target, diagnosis, FLT3_ITD_ratio, Drug_response_mean_low, Drug)
 
@@ -1516,7 +1811,6 @@ tmp<-data_all%>%
   filter(FLT3_TKD==1 | FLT3==0)%>%
   # only FLT3 inhibnitors are considered
   filter(Drug=="Crenolanib" | Drug=="Gilteritinib" | Drug=="Quizartinib"| Drug=="Sorafenib"| Drug=="Midostaurin hydrate")%>%
-  mutate(Drug=as.character(Drug)) %>% 
   mutate(Drug=ifelse(Drug=="Midostaurin hydrate", "Midostaurin\nhydrate", Drug)) %>% 
   select(patientID, Target, diagnosis, FLT3, Drug_response_mean_low, Drug)
 
@@ -1559,7 +1853,7 @@ plot_S2C<-ggplot(tmp, aes(x=IDH,y=AUC,color=IDH))+
   scale_y_continuous(name="Viability (AUC)", limits=c(0, 1.2), breaks=c(0, 0.25, 0.5, 0.75, 1))+
   geom_hline(aes(yintercept=1), colour="black", 
                 linetype="dashed")  +
-  ggpubr::stat_compare_means(method = "t.test",paired=F,  size=starsize, comparisons = list( c(1,3)), method.args = list(       alternative = c("two.sided")))+
+  ggpubr::stat_compare_means(method = "t.test",paired=F,  size=starsize, comparisons = list( c(1,3)))+
   theme_figures_wo_legend+
   xlab("")
 
@@ -1588,14 +1882,14 @@ plot_S2D<-ggplot(tmp, aes(x= TP53,
                 linetype="dashed")  +
   scale_x_discrete(name="")+
   scale_color_manual(values=c(red1, blue1))+
-  ggpubr::stat_compare_means(method = "t.test",paired=F,  size=starsize, comparisons = list( c(1,2)), method.args = list(       alternative = c("two.sided")))+
+  ggpubr::stat_compare_means(method = "t.test",paired=F,  size=starsize, comparisons = list( c(1,2)))+
   theme_figures_wo_legend
 plot_S2D
 
 remove(tmp)
 ```
 
-## 13.5 Plot Figure S2
+## 13.5 Plot Figure 
 ```{r, fig.width=12, fig.height=15}
 design1<-"
 AA
@@ -1613,9 +1907,9 @@ tp<-theme(plot.tag = element_text(size=22, face="bold"))
   plot_annotation(tag_levels = "A")
 
 
-# ggsave( path=(paste0(filepath,"04_Figures")), filename = "Figure_S3.pdf")
+ggsave( path=(paste0(filepath,"docs")), filename = "Figure_S6.pdf")
   
-#ggsave(width = 16, height =24, path=(paste0(filepath,"04_Figures")), filename = "Figure_S2.pdf")
+#ggsave(width = 16, height =24, path=(paste0(filepath,"docs")), filename = "Figure_S2.pdf")
 # remove(tp, plot_S2A, plot_ S2B, plot_S2C, plot_S2D, figure_S2, plot_blank)
 ```
 
@@ -1674,7 +1968,7 @@ cowplot::plot_grid(plotlist = plotList[1:8], ncol=2)
 
 **save in pdf**
 ```{r}
-makepdf(plotList,  "../../inst/Figure_S4_boxplots.pdf", ncol =2,nrow = 4,
+makepdf(plotList,  paste0(filepath,"docs/Figure_S4_boxplots.pdf"), ncol =2,nrow = 4,
                  figNum = 8, width =8, height=12)
 
 remove(plotList, plotTab, example_drugs, df_chemo_bckup)
@@ -1710,7 +2004,7 @@ New Plot not subsetting by response group
 p1<-ggplot(df_tinf, aes(x=t_infiltration, y=AUC_pat)) + 
   geom_point(size=2.5, show.legend = T, alpha=0.85) +
   
-  geom_smooth(method = "lm", se=F, show.legend = F, formula='y ~ x')+
+  geom_smooth(method = "lm", se=F, show.legend = F)+
   
   annotate("text", x = 60, y = 0.9,
   label = c(unique(df_tinf[,]$txt)) ,
@@ -1721,12 +2015,11 @@ p1<-ggplot(df_tinf, aes(x=t_infiltration, y=AUC_pat)) +
   theme_figures+
   theme(aspect.ratio = 1)
 
-# ggsave( path=(paste0(filepath,"04_Figures")), filename = "Figure_S4_Tumor_cell_infiltration.pdf")
 
 p1
 ```
 
-```{r, warning=FALSE}
+```{r}
 plotTab<-filter(screenData, plate_sdev < 0.3, Drug != "DMSO", 
                   Pathway == "Chemotherapy", chemo_pat == T) %>% 
   select(patientID,  diagnosis, treatment_type, chemo_pat, resp_protocol,
@@ -1746,7 +2039,7 @@ p2<-  ggplot(plotTab, aes(x=resp_protocol,color=resp_protocol,y=t_infiltration))
 =FALSE)+
   # geom_boxplot()+
   geom_beeswarm(aes())+
-  stat_compare_means(comparisons = list(c(1,2)), method.args = list(       alternative = c("two.sided")))+
+  stat_compare_means(comparisons = list(c(1,2)))+
   theme_figures+
   guides(color="none")+
   ylab("\nTumor cell infiltration (in %)") +
@@ -1783,8 +2076,8 @@ df_p_drugAUC <- select(df_chemo,
   #plotting order of points
   arrange(label_col)
   
-# df_p_drugAUC %>%
-#   mutate_if(is.numeric, formatC, digits=2) %>% DT::datatable(width = 700)
+df_p_drugAUC %>%
+  mutate_if(is.numeric, formatC, digits=2) %>% DT::datatable(width = 700)
 ```
 
 
@@ -1831,14 +2124,40 @@ wrap_elements(p1)+tp+
   plot_annotation(tag_levels = "A")
 
 
-# ggsave( path=(paste0(filepath,"04_Figures")), filename = "Figure_S5.pdf")
+ggsave( path=(paste0(filepath,"docs/")), filename = "Figure_S8.pdf")
+```
+
+# 16 Midostaurin response of patients who received Midostaurin in vivo
+```{r, fig.width=7, fig.height=7}
+# data_all %>% 
+#   filter(diagnosis=="AML") %>%
+#   filter(treatment_spec%in%c("DA-Induction", "DA-Induction + Midostaurin" )) %>% 
+#   group_by(patientID, FLT3, treatment_spec) %>% 
+#   summarise() %>% 
+#   # arrange(desc(FLT3))%>% 
+#   arrange(treatment_spec)
+
+data_all %>% 
+  filter(diagnosis=="AML") %>%
+  filter(treatment_spec%in%c("DA-Induction", "DA-Induction + Midostaurin" )) %>% 
+  filter(Drug%in%c("Daunorubicin","Cytarabine", "Midostaurin hydrate")) %>% 
+  
+  ggplot(aes(x=treatment_spec, y=AUC))+
+  geom_boxplot()+
+  geom_beeswarm(aes(color=FLT3))+
+  facet_wrap(~Drug)+
+  stat_compare_means(method="t.test")+
+  theme_figures_x_angle_45+
+  theme(legend.position = "bottom")+
+  xlab("In vivo therapy")+
+  ylab("Viability (AUC)")
+
+
+
 ```
 
 
-
-
-
-# 16 Session info
+# Session info
 ```{r}
 sessionInfo()
 ```
