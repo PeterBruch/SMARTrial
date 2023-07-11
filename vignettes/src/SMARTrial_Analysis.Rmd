@@ -481,7 +481,9 @@ ggplot(data=drugs_overview, aes(x=reorder(pathway, -n.y), y=n.x, fill=as.charact
 
 ggsave(width = 12, height =8, path=(paste0(filepath,"docs")), filename = "Figure_1B_Compound_library.svg")
 
-remove(drugs_overview, theme_tmp)
+write_xlsx(rownames_to_column(drugs_overview, var="rowname"), path=paste0(filepath,"docs/Source data/","Fig1B",".xlsx"))
+
+# remove(drugs_overview, theme_tmp)
 ```
 
 ## 3.2 Supplementary table: Drug list
@@ -520,7 +522,7 @@ table1(~ Sex + age + diagnosis_summarized + time_from_ED_dich + lines_pretreatme
 
 ## 4.1.1 Plot of diagnosis
 ```{r}
-df_invivo %>% 
+Fig_2B<-df_invivo %>% 
   dplyr::count(diagnosis) %>%  
   mutate(diagnosis=factor(diagnosis, levels= arrange(dplyr::count(df_invivo, diagnosis),desc(n))$diagnosis )) %>% 
   
@@ -534,15 +536,19 @@ df_invivo %>%
   labs(fill="Diagnosis")
 
 
+
+
+write_xlsx(rownames_to_column(Fig_2B$data, var="rowname"), path=paste0(filepath,"docs/Source data/","Fig2B",".xlsx"))
+
 ggsave(width = 6, height = 4, path=(paste0(filepath,"docs")), filename = "Figure_2_Diagnosis_Piechart.svg")
 ```
 
 ## 4.1.1 Plot of SMARTrial subcohorts
 ```{r}
-tibble("Subcohort"=c("Chemotherapy cohort", "CLL cohort treated with \nVenetoclax or Ibrutinib"), "n"=c(46,18)) %>% 
+ Fig2D<-tibble("Subcohort"=c("Chemotherapy cohort", "CLL cohort treated with \nVenetoclax or Ibrutinib"), "n"=c(46,18)) %>% 
 
 
-  ggplot(aes(x="", y=n, fill=Subcohort))+
+ ggplot(aes(x="", y=n, fill=Subcohort))+
   geom_bar(stat="identity", width=1) +
   coord_polar("y", start=0)+
   geom_text(aes(x=1, size=5, label = ifelse(n>1,paste0( n, " / 64"),"")), position = position_stack(vjust=0.5)) +
@@ -551,8 +557,12 @@ tibble("Subcohort"=c("Chemotherapy cohort", "CLL cohort treated with \nVenetocla
   scale_fill_manual(values=c(blue1, red1))+
   guides(size="none", x="none")+
   labs(fill="")
+Fig2D
 
 ggsave(width = 6, height = 4, path=(paste0(filepath,"docs")), filename = "Figure_2_Subcohort_Piechart.svg")
+
+
+write_xlsx(rownames_to_column(Fig2D$data, var="rowname"), path=paste0(filepath,"docs/Source data/","Fig2D",".xlsx"))
 ```
 
 ## 4.2 Patient list
@@ -656,8 +666,10 @@ p<-pheatmap::pheatmap(viabMat.scaled, annotation_col = annoCol, scale = "row", c
                    show_colnames = FALSE, annotation_colors = colorAnno,
                    main = "Hierarchical clustering of ex vivo responses in SMARTrial cohort", silent = TRUE)
 plot(p$gtable)
-ggsave("../../docs/Figure_S4.png", plot = p$gtable, height = 15, width =15)
-ggsave("../../docs/Figure_S4.pdf", plot = p$gtable, height = 15, width =15)
+# ggsave("../../docs/Figure_S4.png", plot = p$gtable, height = 15, width =15)
+ggsave("../../docs/Figure_ED3.pdf", plot = p$gtable, height = 15, width =15)
+
+write_xlsx(rownames_to_column(as.data.frame(viabMat.scaled), var="rowname"), path=paste0(filepath,"docs/Source data/","ED3",".xlsx"))
 ```
 
 # 5 Primary endpoint
@@ -691,7 +703,7 @@ df_prim_endpoint<-df_prim_endpoint%>% dplyr::count(time_to_analysis) %>% mutate(
 
 df_prim_endpoint$time_to_analysis<-factor(df_prim_endpoint$time_to_analysis, levels=c("within 7 days", "more than 7 days"), labels=c("within 7 days", "more than\n7 days"))
 
-ggplot(data=df_prim_endpoint, aes(x=as.factor(time_to_analysis), y=percent, fill=time_to_analysis))+
+Fig2C<-ggplot(data=df_prim_endpoint, aes(x=as.factor(time_to_analysis), y=percent, fill=time_to_analysis))+
   geom_bar(stat="identity", width=0.5, alpha=0.85)+
   xlab("")+
   annotate("text", x=1, y=98, label= "73/80", size=6)+
@@ -702,6 +714,8 @@ ggplot(data=df_prim_endpoint, aes(x=as.factor(time_to_analysis), y=percent, fill
 
 ggsave(width = 6, height = 4, path=(paste0(filepath,"docs")), filename = "Figure_2B_Time_to_report.svg")
 
+
+write_xlsx(rownames_to_column(Fig2C$data, var="rowname"), path=paste0(filepath,"docs/Source data/","Fig2C",".xlsx"))
 
 # remove(df_prim_endpoint)
 ```
@@ -844,15 +858,185 @@ Sign_drugs_RvsPD
 # remove(plotTab)
 ```
 
-## Plot Figure S7
-```{r, fig.width=12, fig.height=16}
-waterfall_plot_Rvs_PD+
-  Sign_drugs_RvsPD+
-  plot_layout(ncol=1)+
+
+# Genotype - phenotype associations
+##  FLT3-ITD ratio & FLT3 inhibitors
+
+```{r, fig.width=12, fig.height=6}
+# prepare data
+tmp<-data_all%>%
+  # here all AML patients with an available information about FLT3-ITD mutation were considered, even if patients had no evaluable response they were included because here we have no       correlation with in-vivo response
+  filter(diagnosis=="AML")%>%
+  filter(!is.na(FLT3_ITD_ratio), FLT3_ITD_ratio!="na")%>%
+  # only FLT3 inhibnitors are considered
+  filter(Drug=="Crenolanib" | Drug=="Gilteritinib" | Drug=="Quizartinib"| Drug=="Sorafenib"| Drug=="Midostaurin hydrate")%>%
+  mutate(Drug=ifelse(Drug=="Midostaurin hydrate", "Midostaurin\nhydrate", Drug)) %>% 
+  select(patientID, Target, diagnosis, FLT3_ITD_ratio, Drug_response_mean_low, Drug)
+
+# correlation plot
+plot_S2A<-tmp%>%ggplot(aes(x=Drug, y=Drug_response_mean_low, color=FLT3_ITD_ratio))+
+  geom_beeswarm(size=3, alpha=1, cex=5) + 
+  scale_color_gradientn(colors=c(blue1, red1), limits=c(0,1), name="FLT3-ITD ratio", breaks=c(0,0.5,1.0))+
+  scale_y_continuous(name="Viability (AUC)")+
+  theme_figures+
+  stat_cor(aes(x=FLT3_ITD_ratio, y=Drug_response_mean_low), method="kendall",  cor.coef.name = c("tau"), label.sep="\n", label.x.npc=0.4, label.y.npc = 0.1, size=5)+
+  facet_wrap(~ Drug, nrow=1, scales="free_x")+
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.x = element_blank())
+
+plot_S2A
+```
+
+##  FLT3-TKD & FLT3 inhibitors
+```{r}
+# prepare dataset
+tmp<-data_all%>%
+  # here all AML patients with an available information about FLT3-ITD mutation were considered, even if patients had no evaluable response they were included because here we have no       correlation with in-vivo response, only patients with FLT3-TKD mutation but not FLT3-ITD mutation are considered
+  filter(diagnosis=="AML")%>%
+  filter(!is.na(FLT3), FLT3!="na")%>%
+  filter(FLT3_TKD==1 | FLT3==0)%>%
+  # only FLT3 inhibnitors are considered
+  filter(Drug=="Crenolanib" | Drug=="Gilteritinib" | Drug=="Quizartinib"| Drug=="Sorafenib"| Drug=="Midostaurin hydrate")%>%
+  mutate(Drug=ifelse(Drug=="Midostaurin hydrate", "Midostaurin\nhydrate", Drug)) %>% 
+  select(patientID, Target, diagnosis, FLT3, Drug_response_mean_low, Drug)
+
+# plot
+plot_S2B<-ggplot(tmp, aes(x=Drug,y=Drug_response_mean_low,color=FLT3))+
+  geom_beeswarm(size=2.5, alpha=1, cex = 1.8)+
+  scale_color_manual(values=c(blue1, red1), name="", label=c("wildtype", "FLT3-TKD\nmutated"))+
+  scale_x_discrete(name="")+
+  scale_y_continuous(name="Viability (AUC)", limits=c(0, 1.4), breaks=c(0, 0.25, 0.5, 0.75, 1, 1.25))+
+  geom_hline(aes(yintercept=1), colour="black", 
+                linetype="dashed")  +
+  theme_figures_x_angle_45+
+  guides(color=guide_legend(title="FLT3", nrow=1))+
+  theme(legend.position = "bottom", axis.title.x = element_blank() )
+
+plot_S2B
+
+remove(tmp)
+```
+
+##  IDH mutations and venetoclax
+```{r}
+# prepare dataset
+tmp<- data_all%>%
+  # here all AML patients with an available information about IDH mutation were considered, even if patients had no evaluable response they were included because here we have no            correlation with in-vivo response
+  filter(diagnosis=="AML")%>%
+  filter(Drug=="Venetoclax")%>%
+  select(patientID, IDH1, IDH2, Drug, Pathway, AUC)%>%
+  mutate(IDH=case_when(IDH1==1 ~ "IDH1\nmutated", IDH2==1 ~ "IDH2\nmutated", IDH1==0 & IDH2==0 ~ "wildtype", IDH1=="na" & IDH2=="na"~ "NA" ))%>%
+  filter(IDH!="NA")
+
+# plot
+plot_S2C<-ggplot(tmp, aes(x=IDH,y=AUC,color=IDH))+
+# geom_boxplot()+
+  geom_boxplot(data=summarise(group_by(tmp, IDH), mean=mean(AUC), sd=sd(AUC), .groups = "keep"),
+               aes(x=IDH,color=IDH,lower=mean-sd,upper=mean+sd,middle=mean,ymin=mean-sd,ymax=mean+sd),
+               stat="identity", inherit.aes=FALSE)+
+  geom_beeswarm(size=3, cex=3)+
+ scale_color_manual(values=c(red1, gray1, blue1))+
+  scale_y_continuous(name="Viability (AUC)", limits=c(0, 1.2), breaks=c(0, 0.25, 0.5, 0.75, 1))+
+  geom_hline(aes(yintercept=1), colour="black", 
+                linetype="dashed")  +
+  ggpubr::stat_compare_means(method = "t.test",paired=F,  size=starsize, comparisons = list( c(1,3)))+
+  theme_figures_wo_legend+
+  xlab("")
+
+plot_S2C
+
+remove(tmp)
+```
+
+##  Nutlin-3a and TP53
+```{r}
+# prepare dataset
+tmp<-data_all%>%
+  filter(!is.na(TP53), TP53!="na")%>%group_by(patientID,  TP53)%>%
+  filter(Drug=="Nutlin-3a")%>%mutate(TP53=case_when(TP53==1 ~ "TP53\nmutated", TP53==0 ~ "wildtype"))
+
+# plot
+plot_S2D<-ggplot(tmp, aes(x= TP53,
+             y=AUC, 
+             color=TP53))+
+  geom_boxplot(data=summarise(group_by(tmp, TP53), mean=mean(AUC), sd=sd(AUC), .groups = "keep"),
+               aes(x=TP53,color=TP53,lower=mean-sd,upper=mean+sd,middle=mean,ymin=mean-sd,ymax=mean+sd),
+               stat="identity", inherit.aes=FALSE)+
+  geom_beeswarm(size=3, cex=3)+
+  scale_y_continuous(name="Viability (AUC)", limits=c(0, 1.2), breaks=c(0, 0.25, 0.5, 0.75, 1))+
+  geom_hline(aes(yintercept=1), colour="black", 
+                linetype="dashed")  +
+  scale_x_discrete(name="")+
+  scale_color_manual(values=c(red1, blue1))+
+  ggpubr::stat_compare_means(method = "t.test",paired=F,  size=starsize, comparisons = list( c(1,2)))+
+  theme_figures_wo_legend
+plot_S2D
+
+remove(tmp)
+```
+
+##  Plot Figure 
+```{r, fig.width=12, fig.height=15}
+design1<-"
+AA
+BC
+BD
+"
+tp<-theme(plot.tag = element_text(size=22, face="bold"))
+
+
+ wrap_elements(plot_S2A)+tp+
+ wrap_elements( plot_S2B)+tp+
+ wrap_elements( plot_S2C)+tp+
+ wrap_elements( plot_S2D)+tp+
+ plot_layout(design=design1, heights = c(5,3, 3))+
+  plot_annotation(tag_levels = "A")
+
+
+# ggsave( path=(paste0(filepath,"docs")), filename = "Figure_S6.pdf")
+  
+#ggsave(width = 16, height =24, path=(paste0(filepath,"docs")), filename = "Figure_S2.pdf")
+# remove(tp, plot_S2A, plot_ S2B, plot_S2C, plot_S2D, figure_S2, plot_blank)
+```
+
+
+## Plot Figure 
+```{r, fig.width=14, fig.height=19.8}
+
+design1<-"
+AC
+BD
+EE
+FF
+"
+tp<-theme(plot.tag = element_text(size=22, face="bold"))
+
+
+ wrap_elements(plot_S2A+theme(legend.position = "bottom"))+tp+
+ wrap_elements( plot_S2B+theme(axis.text.x = element_text(angle=0, hjust=0.5, vjust=1)))+tp+
+ wrap_elements( plot_S2C)+tp+
+ wrap_elements( plot_S2D)+tp+
+ wrap_elements( waterfall_plot_Rvs_PD+theme(axis.text.x = element_text(angle=45, hjust=1, vjust=1, size=14)))+tp+
+ wrap_elements( Sign_drugs_RvsPD+theme(axis.text.x = element_text(angle=45, hjust=1, vjust=1, size=14)))+tp+
+ plot_layout(design=design1, heights = c(1,1,1,1), widths = c(1,0.5))+
   plot_annotation( tag_levels = "A"  )
 
 
-ggsave(path=(paste0("../../docs/")), filename = "Figure_S7.pdf", device = cairo_pdf)
+ggsave(path=(paste0("../../docs/")), filename = "Figure_ED5.pdf", device = cairo_pdf, width=14, height=19.8)
+
+
+write_xlsx(rownames_to_column(plot_S2A$data, var="rowname"), path=paste0(filepath,"docs/Source data/","ED5A",".xlsx"))
+
+write_xlsx(rownames_to_column(plot_S2B$data, var="rowname"), path=paste0(filepath,"docs/Source data/","ED5B",".xlsx"))
+
+write_xlsx(rownames_to_column(plot_S2C$data, var="rowname"), path=paste0(filepath,"docs/Source data/","ED5C",".xlsx"))
+
+write_xlsx(rownames_to_column(plot_S2D$data, var="rowname"), path=paste0(filepath,"docs/Source data/","ED5D",".xlsx"))
+
+write_xlsx(rownames_to_column(waterfall_plot_Rvs_PD$data, var="rowname"), path=paste0(filepath,"docs/Source data/","ED5E",".xlsx"))
+
+write_xlsx(rownames_to_column(Sign_drugs_RvsPD$data, var="rowname"), path=paste0(filepath,"docs/Source data/","ED5F",".xlsx"))
 ```
 
 
@@ -885,6 +1069,12 @@ for ( drugname in example_drugs ){
 plotTab <- select(df_chemo, Pathway, name, patientID, response, concentration, normVal) %>%
   #PD points on top
   arrange( desc(response) ) %>% mutate(response = factor(response, levels=unique(response)))
+
+Fig_3A_Source<-list(plotTab, df_p_drugAUC)
+
+names(Fig_3A_Source)<-c("Data Dose Resp","Data Boxplot")
+
+write_xlsx(Fig_3A_Source, path=paste0(filepath,"docs/Source data/","Fig3A",".xlsx"))
 ```
 
 **make figs**
@@ -1102,6 +1292,9 @@ Fig3D<-  ggplot(rownames_to_column(tabforFig3D, var = "Drug"))+
 
 Fig3D
 
+tabforFig3D
+
+write_xlsx(tabforFig3D, path=paste0(filepath,"docs/Source data/","Fig3B",".xlsx"))
 ```
 
 # 8 EFS analyses
@@ -1430,6 +1623,12 @@ plot_3F<-
   plot_layout(design=design1, heights = c(1,0.15))
 plot_3F
 
+Fig_3D_Source<-list(as.data.frame(plot_EFS_Vinc$data), as.data.frame(plot_EFS_Vind$data))
+names(Fig_3D_Source)<-c("Vincristine","Vindesine")
+
+write_xlsx(Fig_3D_Source, path=paste0(filepath,"docs/Source data/","Fig3D",".xlsx"))
+
+
 # remove(plot_EFS_Clad, plot_EFS_Vinc, plot_EFS_Vind, legend_3F)
 ```
 
@@ -1445,9 +1644,15 @@ DDDD
 "
 tp<-theme()
 
-wrap_elements(plot_3C) + wrap_elements(Fig3D) + wrap_elements(plot_3E) + wrap_elements(plot_3F) +
+wrap_elements(plot_3C) + 
+  wrap_elements(Fig3D) + 
+  wrap_elements(plot_3E) + 
+  wrap_elements(plot_3F) +
     plot_layout(design=design, widths = c(1,1,.2,1.8), heights = c(1.2,.5,.7)) +
     plot_annotation(title = "Figure 3", tag_levels = "A") &  theme(title = element_text(size=30), plot.tag = element_text(size=22))
+
+
+write_xlsx(as.data.frame(plot_3E$data), path=paste0(filepath,"docs/Source data/","Fig3C",".xlsx"))
 
 ggsave(path=(paste0("../../docs/")), filename = "Figure_3.svg")
   
@@ -1496,7 +1701,9 @@ plot_S005_ESS<-df_S005%>%filter(Pathway=="Chemotherapy")%>%
 
 plot_S005_ESS
 
-ggsave( path=(paste0(filepath,"docs")), filename = "Figure_S9.svg")
+ggsave( path=(paste0(filepath,"docs")), filename = "Figure_ED7A.svg")
+
+write_xlsx(rownames_to_column(plot_S005_ESS$data, var="rowname"), path=paste0(filepath,"docs/Source data/","ED7A",".xlsx"))
 
 remove(df_S005, plot_S005_ESS, theme_figures_S005)
 ```
@@ -1571,13 +1778,18 @@ tp<-theme(plot.tag = element_text(size=22, face="bold"))
 figure_CLL<-
   wrap_elements(plot_ven)+tp+
   wrap_elements(plot_ibr)+tp+
-  plot_layout(design=design1)+
-  plot_annotation(tag_levels ="A") & theme(title = element_text(size=18))
+  plot_layout(design=design1)
 
 figure_CLL
 
-ggsave(path=(paste0(filepath,"docs")), filename = "Figure_S10.pdf")
+ggsave(path=(paste0(filepath,"docs")), filename = "Figure_ED7C.svg")
 # remove(tp, plot_ibr, plot_ven, figure_CLL)
+
+
+write_xlsx(rownames_to_column(as.data.frame(plot_ven$data), var="rowname"), path=paste0(filepath,"docs/Source data/","ED7C",".xlsx"))
+
+
+write_xlsx(rownames_to_column(as.data.frame(plot_ibr$data), var="rowname"), path=paste0(filepath,"docs/Source data/","ED7D",".xlsx"))
 ```
 
 # 12 Quality assessment based on the type of sample material
@@ -1643,6 +1855,7 @@ ED_Fig_1A<-p1
   
 # ggsave( path=(paste0(filepath,"docs")), filename = "Figure_S1_Quality_assessment.pdf")
 
+write_xlsx(rownames_to_column(plotTab, var="rowname"), path=paste0(filepath,"docs/Source data/","ED1A",".xlsx"))
 
 
 remove(plotTab)
@@ -1671,6 +1884,7 @@ ED_Fig_1B<- pheatmap::pheatmap(cor.mat,
          width = 14,
          height = 14)
 
+write_xlsx(rownames_to_column(cor.mat, var="rowname"), path=paste0(filepath,"docs/Source data/","ED1B",".xlsx"))
 
 # ggsave( path=(paste0(filepath,"docs")), filename = "Figure_S2.pdf")
 
@@ -1787,147 +2001,6 @@ p1+p2
 ```
 
 
-
-# 13 Genotype - phenotype associations
-## 13.1 FLT3-ITD ratio & FLT3 inhibitors
-
-```{r, fig.width=12, fig.height=6}
-# prepare data
-tmp<-data_all%>%
-  # here all AML patients with an available information about FLT3-ITD mutation were considered, even if patients had no evaluable response they were included because here we have no       correlation with in-vivo response
-  filter(diagnosis=="AML")%>%
-  filter(!is.na(FLT3_ITD_ratio), FLT3_ITD_ratio!="na")%>%
-  # only FLT3 inhibnitors are considered
-  filter(Drug=="Crenolanib" | Drug=="Gilteritinib" | Drug=="Quizartinib"| Drug=="Sorafenib"| Drug=="Midostaurin hydrate")%>%
-  mutate(Drug=ifelse(Drug=="Midostaurin hydrate", "Midostaurin\nhydrate", Drug)) %>% 
-  select(patientID, Target, diagnosis, FLT3_ITD_ratio, Drug_response_mean_low, Drug)
-
-# correlation plot
-plot_S2A<-tmp%>%ggplot(aes(x=Drug, y=Drug_response_mean_low, color=FLT3_ITD_ratio))+
-  geom_beeswarm(size=3, alpha=1, cex=5) + 
-  scale_color_gradientn(colors=c(blue1, red1), limits=c(0,1), name="FLT3-ITD ratio", breaks=c(0,0.5,1.0))+
-  scale_y_continuous(name="Viability (AUC)")+
-  theme_figures+
-  stat_cor(aes(x=FLT3_ITD_ratio, y=Drug_response_mean_low), method="kendall",  cor.coef.name = c("tau"), label.sep="\n", label.x.npc=0.4, label.y.npc = 0.04, size=5)+
-  facet_wrap(~ Drug, nrow=1, scales="free_x")+
-  theme(axis.text.x = element_blank(),
-        axis.ticks.x=element_blank(),
-        axis.title.x = element_blank())
-
-plot_S2A
-```
-
-## 13.2 FLT3-TKD & FLT3 inhibitors
-```{r}
-# prepare dataset
-tmp<-data_all%>%
-  # here all AML patients with an available information about FLT3-ITD mutation were considered, even if patients had no evaluable response they were included because here we have no       correlation with in-vivo response, only patients with FLT3-TKD mutation but not FLT3-ITD mutation are considered
-  filter(diagnosis=="AML")%>%
-  filter(!is.na(FLT3), FLT3!="na")%>%
-  filter(FLT3_TKD==1 | FLT3==0)%>%
-  # only FLT3 inhibnitors are considered
-  filter(Drug=="Crenolanib" | Drug=="Gilteritinib" | Drug=="Quizartinib"| Drug=="Sorafenib"| Drug=="Midostaurin hydrate")%>%
-  mutate(Drug=ifelse(Drug=="Midostaurin hydrate", "Midostaurin\nhydrate", Drug)) %>% 
-  select(patientID, Target, diagnosis, FLT3, Drug_response_mean_low, Drug)
-
-# plot
-plot_S2B<-ggplot(tmp, aes(x=Drug,y=Drug_response_mean_low,color=FLT3))+
-  geom_beeswarm(size=2.5, alpha=1, cex = 1.8)+
-  scale_color_manual(values=c(blue1, red1), name="", label=c("wildtype", "FLT3-TKD\nmutated"))+
-  scale_x_discrete(name="")+
-  scale_y_continuous(name="Viability (AUC)", limits=c(0, 1.4), breaks=c(0, 0.25, 0.5, 0.75, 1, 1.25))+
-  geom_hline(aes(yintercept=1), colour="black", 
-                linetype="dashed")  +
-  theme_figures_x_angle_45+
-  guides(color=guide_legend(title="FLT3", nrow=1))+
-  theme(legend.position = "bottom", axis.title.x = element_blank() )
-
-plot_S2B
-
-remove(tmp)
-```
-
-## 13.3 IDH mutations and venetoclax
-```{r}
-# prepare dataset
-tmp<- data_all%>%
-  # here all AML patients with an available information about IDH mutation were considered, even if patients had no evaluable response they were included because here we have no            correlation with in-vivo response
-  filter(diagnosis=="AML")%>%
-  filter(Drug=="Venetoclax")%>%
-  select(patientID, IDH1, IDH2, Drug, Pathway, AUC)%>%
-  mutate(IDH=case_when(IDH1==1 ~ "IDH1\nmutated", IDH2==1 ~ "IDH2\nmutated", IDH1==0 & IDH2==0 ~ "wildtype", IDH1=="na" & IDH2=="na"~ "NA" ))%>%
-  filter(IDH!="NA")
-
-# plot
-plot_S2C<-ggplot(tmp, aes(x=IDH,y=AUC,color=IDH))+
-# geom_boxplot()+
-  geom_boxplot(data=summarise(group_by(tmp, IDH), mean=mean(AUC), sd=sd(AUC), .groups = "keep"),
-               aes(x=IDH,color=IDH,lower=mean-sd,upper=mean+sd,middle=mean,ymin=mean-sd,ymax=mean+sd),
-               stat="identity", inherit.aes=FALSE)+
-  geom_beeswarm(size=3, cex=3)+
- scale_color_manual(values=c(red1, gray1, blue1))+
-  scale_y_continuous(name="Viability (AUC)", limits=c(0, 1.2), breaks=c(0, 0.25, 0.5, 0.75, 1))+
-  geom_hline(aes(yintercept=1), colour="black", 
-                linetype="dashed")  +
-  ggpubr::stat_compare_means(method = "t.test",paired=F,  size=starsize, comparisons = list( c(1,3)))+
-  theme_figures_wo_legend+
-  xlab("")
-
-plot_S2C
-
-remove(tmp)
-```
-
-## 13.4 Nutlin-3a and TP53
-```{r}
-# prepare dataset
-tmp<-data_all%>%
-  filter(!is.na(TP53), TP53!="na")%>%group_by(patientID,  TP53)%>%
-  filter(Drug=="Nutlin-3a")%>%mutate(TP53=case_when(TP53==1 ~ "TP53\nmutated", TP53==0 ~ "wildtype"))
-
-# plot
-plot_S2D<-ggplot(tmp, aes(x= TP53,
-             y=AUC, 
-             color=TP53))+
-  geom_boxplot(data=summarise(group_by(tmp, TP53), mean=mean(AUC), sd=sd(AUC), .groups = "keep"),
-               aes(x=TP53,color=TP53,lower=mean-sd,upper=mean+sd,middle=mean,ymin=mean-sd,ymax=mean+sd),
-               stat="identity", inherit.aes=FALSE)+
-  geom_beeswarm(size=3, cex=3)+
-  scale_y_continuous(name="Viability (AUC)", limits=c(0, 1.2), breaks=c(0, 0.25, 0.5, 0.75, 1))+
-  geom_hline(aes(yintercept=1), colour="black", 
-                linetype="dashed")  +
-  scale_x_discrete(name="")+
-  scale_color_manual(values=c(red1, blue1))+
-  ggpubr::stat_compare_means(method = "t.test",paired=F,  size=starsize, comparisons = list( c(1,2)))+
-  theme_figures_wo_legend
-plot_S2D
-
-remove(tmp)
-```
-
-## 13.5 Plot Figure 
-```{r, fig.width=12, fig.height=15}
-design1<-"
-AA
-BC
-BD
-"
-tp<-theme(plot.tag = element_text(size=22, face="bold"))
-
-
- wrap_elements(plot_S2A)+tp+
- wrap_elements( plot_S2B)+tp+
- wrap_elements( plot_S2C)+tp+
- wrap_elements( plot_S2D)+tp+
- plot_layout(design=design1, heights = c(5,3, 3))+
-  plot_annotation(tag_levels = "A")
-
-
-ggsave( path=(paste0(filepath,"docs")), filename = "Figure_S6.pdf")
-  
-#ggsave(width = 16, height =24, path=(paste0(filepath,"docs")), filename = "Figure_S2.pdf")
-# remove(tp, plot_S2A, plot_ S2B, plot_S2C, plot_S2D, figure_S2, plot_blank)
-```
 
 
 # 14 Figure S3: Boxplots for all significant drugs: R vs SD vs PD
@@ -2140,7 +2213,13 @@ wrap_elements(p1)+tp+
   plot_annotation(tag_levels = "A")
 
 
-ggsave( path=(paste0(filepath,"docs/")), filename = "Figure_S8.pdf")
+ggsave( path=(paste0(filepath,"docs/")), filename = "Figure_ED6.pdf")
+
+write_xlsx(rownames_to_column(p1$data, var="rowname"), path=paste0(filepath,"docs/Source data/","ED6A",".xlsx"))
+
+write_xlsx(rownames_to_column(p2$data, var="rowname"), path=paste0(filepath,"docs/Source data/","ED6B",".xlsx"))
+
+write_xlsx(rownames_to_column(p3$data, var="rowname"), path=paste0(filepath,"docs/Source data/","ED6C",".xlsx"))
 ```
 
 # 16 Midostaurin response of patients who received Midostaurin in vivo

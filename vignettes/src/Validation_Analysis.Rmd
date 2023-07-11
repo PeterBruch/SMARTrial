@@ -13,7 +13,7 @@ editor_options:
 ---
 
 This R code includes the analyses and figures of the SMART manuscript based on the validation cohort of 95 AML patient samples. 
-It includes analyses of Junyan Lu, iwth extensions and modifications by Peter-Martin Bruch.
+It includes analyses of Junyan Lu, with extensions and modifications by Peter-Martin Bruch.
 
 # Load libraries and data
 
@@ -184,6 +184,8 @@ PieDonutCustom(plotTab, aes(ELNrisk, invivo, count=n, pieLabel = "ELN risk"),
 aucTab %>% distinct(patID, ELN22, group) %>% 
   group_by(ELN22, group) %>% 
   count()
+
+writexl::write_xlsx(rownames_to_column(as.data.frame(plotTab),var="rowname"), path=paste0("../../","docs/Source data/","Fig4A",".xlsx"))
 ```
 
 
@@ -223,9 +225,10 @@ viabMat <- aucTab %>% select(patID, Drug, auc) %>%
 ```{r validation_drugCor, fig.height=7, fig.width=8, fig.path="../../docs/", dev=c("png","pdf")}
 corMat <- cor(t(viabMat))
 pheatmap::pheatmap(corMat, color = colorRampPalette(c("#003DA5", "white", "#A6093D"))(100), 
-         filename=paste0("../../docs/Figure_S3.pdf"),
+         filename=paste0("../../docs/Figure_ED2.pdf"),
                    clustering_method = "ward.D2", main = "Drug-Drug correlation heatmap")
 
+writexl::write_xlsx(rownames_to_column(as.data.frame(corMat),var="rowname"), path=paste0("../../","docs/Source data/","ED2",".xlsx"))
 
 ```
 
@@ -244,7 +247,7 @@ annoColor <- list(`ELN risk` = c(adverse = "#E18727FF", intermediate = "#6F99ADF
 viabMat <- viabMat[,rownames(colAnno)]
 pheatmap(viabMat, annotation_col = colAnno,
          cluster_cols = FALSE, annotation_colors = annoColor,
-         filename=paste0("../../docs/validation_drugHeatmap.pdf"),
+         # filename=paste0("../../docs/validation_drugHeatmap.pdf"),
          show_colnames = FALSE,
          treeheight_row = 20)
 ```
@@ -261,9 +264,11 @@ p <- pheatmap(viabMat.scaled, annotation_col = colAnno,
          show_colnames = FALSE,
          treeheight_row = 20, silent = TRUE)
 cowplot::plot_grid(p$gtable)
-ggsave("../../docs/HC_heatmap_Validation.png", plot = p$gtable, height = 8, width =15)
-ggsave("../../docs/HC_heatmap_Validation.pdf", plot = p$gtable, height = 8, width =15)
+# ggsave("../../docs/HC_heatmap_Validation.png", plot = p$gtable, height = 8, width =15)
+ggsave("../../docs/Figure_ED4.pdf", plot = p$gtable, height = 8, width =15)
 
+
+writexl::write_xlsx(rownames_to_column(as.data.frame(viabMat.scaled),var="rowname"), path=paste0("../../","docs/Source data/","ED4",".xlsx"))
 ```
 
 
@@ -357,6 +362,10 @@ plotList_box <- lapply(seq(nrow(resTab.sig)) ,function(i){
 names(plotList_box) <- resTab.sig$Drug
 pBox <- cowplot::plot_grid(plotlist = plotList_box, ncol=2)
 pBox
+
+
+writexl::write_xlsx(rownames_to_column(as.data.frame(aucTab),var="rowname"), path=paste0("../../","docs/Source data/","ED8A",".xlsx"))
+
 ```
 
 ## Dose-response curves for selected drugs
@@ -399,6 +408,9 @@ plotList_DResp <- lapply(example_drugs ,function(drugname){
 
 pDose <- cowplot::plot_grid(plotlist = plotList_DResp, ncol=2)
 pDose
+
+
+writexl::write_xlsx(rownames_to_column(as.data.frame(concTab),var="rowname"), path=paste0("../../","docs/Source data/","ED8B",".xlsx"))
 ```
 
 ## Multi-variate test (with blocking for ELN risk)
@@ -430,6 +442,12 @@ resTab <-  testTab %>%
     arrange(p.value) %>% ungroup() %>%
     mutate(p.adj = p.adjust(p.value, method ="BH"))
 head(resTab)
+
+
+writexl::write_xlsx(rownames_to_column(as.data.frame(testTab),var="rowname"), path=paste0("../../","docs/Source data/","ED9B",".xlsx"))
+
+
+writexl::write_xlsx(rownames_to_column(as.data.frame(testTab),var="rowname"), path=paste0("../../","docs/Source data/","Fig4C",".xlsx"))
 ```
 There are significant p-values, but p.adj is borderline significant 
 
@@ -614,6 +632,9 @@ resTab.sig
 ```
 
 ```{r, warning=FALSE, message=FALSE}
+
+writexl::write_xlsx(rownames_to_column(as.data.frame(testTab),var="rowname"), path=paste0("../../","docs/Source data/","Fig4D",".xlsx"))
+
 pList <- lapply(seq(nrow(resTab.sig)), function(i) {
     rec <- resTab.sig[i,]
     plotTab <- filter(testTab, outcome == rec$outcome, Drug == rec$Drug) 
@@ -679,7 +700,10 @@ resTab.sig <- filter(resTab, p<0.05)
 resTab.sig
 ```
 
-```{r Figure_S13, fig.height=25, fig.width=15, warning=FALSE, message=FALSE, fig.path="../../docs/", dev=c("png","pdf")}
+```{r Figure_ED10, fig.height=25, fig.width=15, warning=FALSE, message=FALSE, fig.path="../../docs/", dev=c("png","pdf")}
+
+writexl::write_xlsx(rownames_to_column(as.data.frame(testTab),var="rowname"), path=paste0("../../","docs/Source data/","ED10",".xlsx"))
+
 pList <- lapply(seq(nrow(resTab.sig)), function(i) {
     rec <- resTab.sig[i,]
     leg <- NULL
@@ -700,6 +724,7 @@ pList <- lapply(seq(nrow(resTab.sig)), function(i) {
     cowplot::plot_grid(gTitle,cowplot::plot_grid(plotlist = pELN, nrow=1), leg, ncol=1, rel_heights = c(0.1,1,0.2))
 })
 cowplot::plot_grid(plotlist = pList, ncol=1)
+
 
 
 ```
@@ -777,6 +802,9 @@ names(pList) <- gsub("_"," + ", resTab.sig$Drug)
 
 pList$`Daunorubicin + Cytarabin`$labels$title<-"EFS ~ Daunorubicin + Cytarabine"
 
+
+writexl::write_xlsx(rownames_to_column(as.data.frame(testTab),var="rowname"), path=paste0("../../","docs/Source data/","Fig4E",".xlsx"))
+
 ```
 
 ```{r}
@@ -802,7 +830,9 @@ pFig4 <- plot_grid(plot_grid(plot_grid(pPie, pVolcano, ncol=1, rel_heights = c(1
                    ncol=1, rel_heights = c(1,0.05,0.6))+
   patchwork::plot_annotation(title = "Figure 4") &  theme(title = element_text(size=25))
 
-  
+
+writexl::write_xlsx(rownames_to_column(as.data.frame(pVolcano$data),var="rowname"), path=paste0("../../","docs/Source data/","Fig4B",".xlsx"))
+
 pFig4
 ggsave("../../docs/Figure_4.pdf", height = 18, width = 14)
 ```
@@ -810,7 +840,10 @@ ggsave("../../docs/Figure_4.pdf", height = 18, width = 14)
 ## Supplementary plot showing the boxplot and dose-response plot 
 ```{r, fig.height=12, fig.width=20}
 plot_grid(pBox, pDose, ncol=2, labels=c("A","B"), label_size = 20)
-ggsave("../../docs/Figure_S11.pdf", height = 12, width = 20)
+ggsave("../../docs/Figure_ED8.pdf", height = 12, width = 20)
+
+
+
 ```
 
 
@@ -818,7 +851,9 @@ ggsave("../../docs/Figure_S11.pdf", height = 12, width = 20)
 ## Supplementary plot showing p-value heatmap and boxplot stratified by ELNrisk
 ```{r, fig.height=20, fig.width=10}
 plot_grid(pPheatmap, pBoxELN_supp, ncol=1, labels=c("A","B"), label_size = 20, rel_heights = c(0.5,1))
-ggsave("../../docs/Figure_S12.pdf", height = 20, width =10)
+ggsave("../../docs/Figure_ED9.pdf", height = 20, width =10)
+
+writexl::write_xlsx(rownames_to_column(as.data.frame(pPheatmap$data),var="rowname"), path=paste0("../../","docs/Source data/","ED9A",".xlsx"))
 ```
 
 ```
