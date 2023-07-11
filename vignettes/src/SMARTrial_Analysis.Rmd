@@ -1624,8 +1624,6 @@ p1<-ggplot(plotTab, aes(x = material, y = plate_sdev, fill = frozen, shape = pla
   geom_point(aes(color= plate), alpha = 0, size=2.5) +
   geom_beeswarm(cex=1.5, size=2.5, alpha= 0.85, show.legend = F) +
   scale_shape_manual(values = c("Myeloid" = 25, "Lymphoid" = 21)) +
-  #scale_color_manual(values = c("Fresh"="darkred","Frozen"="deepskyblue4")) +
-  #scale_fill_manual(values = c("Fresh"="darkred","Frozen"="deepskyblue4")) +
   scale_color_manual(values = c("Fresh"=red2,"Frozen"=blue1)) +
   scale_fill_manual(values = c("Fresh"=red2,"Frozen"=blue1)) +
   geom_hline(yintercept = 0.3, linetype="22", col="gray30", size=0.7) +
@@ -1638,9 +1636,12 @@ p1<-ggplot(plotTab, aes(x = material, y = plate_sdev, fill = frozen, shape = pla
            shape = guide_legend(override.aes = list(alpha = 1), nrow=2)) +
    theme_figures+
   theme(legend.position = "right")
-p1  
+
+p1
+
+ED_Fig_1A<-p1  
   
-ggsave( path=(paste0(filepath,"docs")), filename = "Figure_S1_Quality_assessment.pdf")
+# ggsave( path=(paste0(filepath,"docs")), filename = "Figure_S1_Quality_assessment.pdf")
 
 
 
@@ -1661,7 +1662,7 @@ cor.mat <- column_to_rownames(cor.mat, var="rowname")
 breaks <- c(seq(-1, 1, length.out = 101)) %>% `names<-`(
      colorRampPalette(c("#003DA5", "#2055B0", "#406EBC", "#6086C7", "#809ED2", "#9FB6DD", "#BFCFE9", "#DFE7F4", "white", "#F4E0E7", "#E9C2CF", "#DEA3B6", "#D3849E", "#C76586", "#BC476E", "#B12855", "#A6093D"))(101))
 
-pheatmap::pheatmap(cor.mat,
+ED_Fig_1B<- pheatmap::pheatmap(cor.mat,
          breaks = breaks,
          color= names(breaks),
          border_color=NA,
@@ -1675,6 +1676,21 @@ pheatmap::pheatmap(cor.mat,
 
 # unique(data_all$patientID) %>% length()
 ```
+
+### Plot Extended Data Figure 1
+```{r, fig.width=14, fig.height=19.8}
+tp<-theme(plot.tag = element_text(size=22, face="bold"))
+
+wrap_elements(ED_Fig_1A)+tp+
+  ggplotify::as.ggplot(ED_Fig_1B)+tp+
+  plot_layout(ncol=1, heights = c(1,3))+
+  plot_annotation(tag_levels = "A")
+
+
+ggsave( path=(paste0(filepath,"docs")), filename = "Figure_ED1.pdf")
+```
+
+
 
 ## 12.2 Raw viability between fresh and frozen samples
 
